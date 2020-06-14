@@ -1,6 +1,5 @@
 import React from 'react'
 import { Text, requireNativeComponent, Platform } from 'react-native'
-import { v4 } from 'uuid'
 import memoize from 'fast-memoize'
 
 const RNSelectableText = requireNativeComponent('RNSelectableText')
@@ -97,13 +96,13 @@ export const SelectableText = ({ onSelection, onHighlightPress, value, children,
       {...props}
       onHighlightPress={onHighlightPressNative}
       selectable
-      onSelection={onSelectionNative}
+      onSelection={onSelectionNative}      
     >
-      <Text selectable key={v4()}>
+      <Text selectable key={Math.random()}>
         {props.highlights && props.highlights.length > 0
           ? mapHighlightsRanges(value, props.highlights).map(({ id, isHighlight, text }) => (
               <Text
-                key={v4()}
+                key={Math.random()}
                 selectable
                 style={
                   isHighlight
