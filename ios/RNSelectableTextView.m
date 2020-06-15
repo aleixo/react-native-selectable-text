@@ -26,7 +26,7 @@
 }
 
 NSString *const CUSTOM_SELECTOR = @"_CUSTOM_SELECTOR_";
-
+NSUInteger highlighedSelectionIndex = -1;
 UITextPosition *selectionStart;
 UITextPosition* beginning;
 
@@ -81,26 +81,23 @@ UITextPosition* beginning;
         [_backedTextInputView addGestureRecognizer:singleTapGesture];
         
         [singleTapGesture requireGestureRecognizerToFail:tapGesture];
-        
+                    
         [self setUserInteractionEnabled:YES];
     }
 
     return self;
 }
 
--(void) _handleGesture
-{
-    if (!_backedTextInputView.isFirstResponder) {
-        [_backedTextInputView becomeFirstResponder];
-    }
-        
+-(void) displayMenu: (NSArray<NSString *> *) items {
     UIMenuController *menuController = [UIMenuController sharedMenuController];
     
-    if (menuController.isMenuVisible) return;
+    if (menuController.isMenuVisible) {
+        [menuController setMenuVisible:NO animated:YES];
+    };
     
-    NSMutableArray *menuControllerItems = [NSMutableArray arrayWithCapacity:self.menuItems.count];
+    NSMutableArray *menuControllerItems = [NSMutableArray arrayWithCapacity:items.count];
     
-    for(NSString *menuItemName in self.menuItems) {
+    for(NSString *menuItemName in items) {
         NSString *sel = [NSString stringWithFormat:@"%@%@", CUSTOM_SELECTOR, menuItemName];
         UIMenuItem *item = [[UIMenuItem alloc] initWithTitle: menuItemName
                                                       action: NSSelectorFromString(sel)];
@@ -128,21 +125,13 @@ UITextPosition* beginning;
     
     const NSInteger location = [_backedTextInputView offsetFromPosition:beginning toPosition:selectionStart];    
     const NSInteger endLocation = [_backedTextInputView offsetFromPosition:beginning toPosition:selectionEnd];
-            
-    for (NSDictionary *s in self.highlights) {
-        const NSInteger start = [s[@"start"] integerValue];
-        const NSInteger end = [s[@"end"] integerValue];
-        const NSRange hRange = NSMakeRange(start, end - start);
-        const NSRange wRange = NSMakeRange(location, endLocation - location);
-        if (NSIntersectionRange(hRange, wRange).length > 0) {
-            [_backedTextInputView setSelectedRange:hRange];
-        }
-    }
         
     self.onHighlightPress(@{
         @"clickedRangeStart": @(location),
         @"clickedRangeEnd": @(endLocation),
     });
+    
+    [_backedTextInputView setSelectedTextRange:nil notifyDelegate:true];
 }
 
 -(void) handleLongPress: (UILongPressGestureRecognizer *) gesture
@@ -152,19 +141,22 @@ UITextPosition* beginning;
     
     UITextPosition *tapPos = [_backedTextInputView closestPositionToPoint:pos];
     UITextRange *word = [_backedTextInputView.tokenizer rangeEnclosingPosition:tapPos withGranularity:(UITextGranularityWord) inDirection:UITextLayoutDirectionRight];
-
     
     switch ([gesture state]) {
         case UIGestureRecognizerStateBegan:
             selectionStart = word.start;
+            highlighedSelectionIndex = -1;
             break;
         case UIGestureRecognizerStateChanged:
             break;
         case UIGestureRecognizerStateEnded:
             selectionStart = nil;
-            [self _handleGesture];
+            if (highlighedSelectionIndex != -1) {
+                [self displayMenu:self.highlightMenuItems];
+            } else {
+                [self displayMenu:self.menuItems];
+            }
             return;
-            
         default:
             break;
     }
@@ -175,17 +167,33 @@ UITextPosition* beginning;
     const NSInteger endLocation = [_backedTextInputView offsetFromPosition:beginning toPosition:selectionEnd];
 
     if (location == 0 && endLocation == 0) return;
-
+        
+    NSRange selectionRange = NSMakeRange(location, endLocation - location);
+    
+    NSUInteger index = 0;
+    for (NSDictionary *s in self.highlights) {
+        const NSInteger start = [s[@"start"] integerValue];
+        const NSInteger end = [s[@"end"] integerValue];
+        const NSRange highlightRange = NSMakeRange(start, end - start);
+        
+        if (NSIntersectionRange(selectionRange, highlightRange).length == selectionRange.length) {
+            highlighedSelectionIndex = index;
+            selectionRange = highlightRange;
+            break;
+        }
+        
+        index ++;
+    }
+    
     [_backedTextInputView select:self];
-    [_backedTextInputView setSelectedRange:NSMakeRange(location, endLocation - location)];
-
+    [_backedTextInputView setSelectedRange:selectionRange];
 }
 
 -(void) handleTap: (UITapGestureRecognizer *) gesture
 {
     [_backedTextInputView select:self];
     [_backedTextInputView selectAll:self];
-    [self _handleGesture];
+    [self displayMenu:self.menuItems];
 }
 
 - (void)setAttributedText:(NSAttributedString *)attributedText
@@ -215,9 +223,10 @@ UITextPosition* beginning;
         @"content": [[self.attributedText string] substringWithRange:NSMakeRange(start, end)],
         @"eventType": eventType,
         @"selectionStart": @(start),
-        @"selectionEnd": @(selection.end)
+        @"selectionEnd": @(selection.end),
+        @"highlighedSelectionIndex": @(highlighedSelectionIndex),
     });
-    
+            
     [_backedTextInputView setSelectedTextRange:nil notifyDelegate:false];
 }
 
@@ -259,7 +268,6 @@ UITextPosition* beginning;
 
 - (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event
 {
-    [_backedTextInputView setSelectedTextRange:nil notifyDelegate:true];
     return [super hitTest:point withEvent:event];
 }
 
